@@ -25,13 +25,101 @@ void fft(float data[], unsigned long nn, int isign);
 
 void test2dfft();
 void fft2d(int N, int M, double **real_fuv, double **image_fuv, int isign);
-// void fft2d(float **data, int size, unsigned long nn, int isign);
 void imgtodata(ImageType &image, float **data);
 void datatoimg(ImageType &image, float **data);
 
+void experiment4(char fname[]);
+
 int main(int argc, char *argv[])
 {
+	char girl[] = "girl.pgm";
+
+	experiment4(girl);
+
 	return 0;
+}
+
+void experiment4(char fname[])
+{
+	ImageType baseImage(512, 512, 255);
+	readImage(fname, baseImage);
+
+	// Step 1 - Ln f(x,y)
+	int temp;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			baseImage.getPixelVal(i, j, temp);
+			temp = log(temp);
+			baseImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Step 2 FT
+	double **real_fuv = new double *[512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_fuv[i] = new double[512 * 2 + 1];
+	}
+	double **image_fuv = new double *[512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_fuv[i] = new double[512 * 2 + 1];
+	}
+
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			baseImage.getPixelVal(i, j, temp);
+			real_fuv[i][j] = temp;
+			image_fuv[i][j] = 0;
+		}
+	}
+	fft2d(512, 512, real_fuv, image_fuv, -1);
+	// Shift the spectrum
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
+			image_fuv[i][j] = image_fuv[i][j] * pow(-1, i + j);
+		}
+	}
+
+	// Step 3 Apply H(u,v)
+	float gamma_H = 1.5, gamma_L = .5, c = 1, D_0 = 1.8;
+	float coef = -c / D_0 / D_0;
+	float gammaDiff = gamma_H - gamma_L;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			int i_adj = i - 512 / 2, j_adj = j - 512 / 2;
+			real_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gamma_L;
+			image_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gamma_L;
+		}
+	}
+
+	// Step 4 Inverse FT
+	fft2d(512, 512, real_fuv, image_fuv, -1);
+
+	// Step 5 Take exp
+	ImageType finalImage(512, 512, 255);
+	int temp2;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			temp2 = real_fuv[i][j];
+			temp2 = exp(temp2);
+			finalImage.setPixelVal(i, j, temp2);
+		}
+	}
+
+	char finImage[] = "part4.pgm";
+	writeImage(finImage, finalImage);
 }
 
 void test2dfft()

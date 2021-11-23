@@ -29,7 +29,7 @@ void imgtodata(ImageType &image, float **data);
 void datatoimg(ImageType &image, float **data);
 
 void experiment2(char fname[]);
-void experiment4(char fname[]);
+void experiment4(char fname[], float gh, float gl);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 	//test2dfft();
 
 	//experiment2(lenna);
-	experiment4(girl);
+	experiment4(girl, 1.5, 0.5);
 
 	return 0;
 }
@@ -310,7 +310,7 @@ void experiment2(char fname[])
 	writeImage(finImage_freq, finImage_frequency);
 }
 
-void experiment4(char fname[])
+void experiment4(char fname[], float gh, float gl)
 {
 	ImageType baseImage(512, 512, 255);
 	ImageType paddedImage(1024, 1024, 255);
@@ -318,6 +318,7 @@ void experiment4(char fname[])
 
 	// Padding base image
 	int temp;
+	double temp2;
 	for (int i = 0; i < 512; i++)
 	{
 		for (int j = 0; j < 512; j++)
@@ -352,7 +353,7 @@ void experiment4(char fname[])
 		for (int j = 0; j < 1024; j++)
 		{
 			paddedImage.getPixelVal(i, j, temp);
-			double temp2 = log(temp + 1);
+			temp2 = log(temp + 1);
 			real_fuv[i][j] = temp2;
 			image_fuv[i][j] = 0;
 		}
@@ -371,16 +372,16 @@ void experiment4(char fname[])
 	fft2d(1024, 1024, real_fuv, image_fuv, -1);
 
 	// Step 3 Apply H(u,v)
-	float gamma_H = 1, gamma_L = 1, c = 1, D_0 = 1.8;
+	float c = 1, D_0 = 1.8;
 	float coef = -c / (D_0 * D_0);
-	float gammaDiff = gamma_H - gamma_L;
+	float gammaDiff = gh - gl;
 	for (int i = 0; i < 1024; i++)
 	{
 		for (int j = 0; j < 1024; j++)
 		{
 			int i_adj = i - 1024 / 2, j_adj = j - 1024 / 2;
-			real_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gamma_L;
-			image_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gamma_L;
+			real_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gl;
+			image_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gl;
 		}
 	}
 
@@ -388,24 +389,24 @@ void experiment4(char fname[])
 	fft2d(1024, 1024, real_fuv, image_fuv, 1);
 
 	// Step 5 Take exp
-	ImageType finalImage(1024, 1024, 255);
-	for (int i = 0; i < 1024; i++)
+	ImageType finalImage(512, 512, 255);
+	for (int i = 0; i < 512; i++)
 	{
-		for (int j = 0; j < 1024; j++)
+		for (int j = 0; j < 512; j++)
 		{
-			temp = real_fuv[i][j] * pow(-1, i + j);
-			temp = exp(temp) - 1;
-			finalImage.setPixelVal(i, j, temp);
+			temp2 = real_fuv[i][j] * pow(-1, i + j);
+			temp2 = exp(temp2) - 1;
+			finalImage.setPixelVal(i, j, temp2);
 		}
 	}
 
 	// Normalization
-	/*finalImage.getPixelVal(0, 0, temp);
+	finalImage.getPixelVal(0, 0, temp);
 	float rmax = temp;
 	float rmin = temp;
-	for (int i = 0; i < 1024; i++)
+	for (int i = 0; i < 512; i++)
 	{
-		for (int j = 0; j < 1024; j++)
+		for (int j = 0; j < 512; j++)
 		{
 			finalImage.getPixelVal(i, j, temp);
 			if (temp > rmax)
@@ -418,15 +419,15 @@ void experiment4(char fname[])
 			}
 		}
 	}
-	for (int i = 0; i < 1024; i++)
+	for (int i = 0; i < 512; i++)
 	{
-		for (int j = 0; j < 1024; j++)
+		for (int j = 0; j < 512; j++)
 		{
 			finalImage.getPixelVal(i, j, temp);
 			temp = 255 * (temp - rmin) / (rmax - rmin);
 			finalImage.setPixelVal(i, j, temp);
 		}
-	}*/
+	}
 
 	//print and clean up
 	char finImage[] = "part4.pgm";

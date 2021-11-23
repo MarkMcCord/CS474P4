@@ -357,10 +357,6 @@ void experiment4(char fname[])
 			image_fuv[i][j] = 0;
 		}
 	}
-<<<<<<< HEAD
-=======
-	fft2d(1024, 1024, real_fuv, image_fuv, -1);
->>>>>>> 5054bc1eaaa1ff6f440ffdf96f9e0e6f7257d899
 
 	// Shift the spectrum
 	for (int i = 0; i < 1024; i++)
@@ -390,7 +386,6 @@ void experiment4(char fname[])
 
 	// Step 4 Inverse FT
 	fft2d(1024, 1024, real_fuv, image_fuv, 1);
-<<<<<<< HEAD
 
 	// Step 5 Take exp
 	ImageType finalImage(1024, 1024, 255);
@@ -403,8 +398,6 @@ void experiment4(char fname[])
 			finalImage.setPixelVal(i, j, temp);
 		}
 	}
-=======
->>>>>>> 5054bc1eaaa1ff6f440ffdf96f9e0e6f7257d899
 
 	// Normalization
 	/*finalImage.getPixelVal(0, 0, temp);

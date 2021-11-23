@@ -41,8 +41,8 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	//experiment2(lenna);
-	experiment4(girl, 1.5, 0.5);
+	experiment2(lenna);
+	// experiment4(girl, 1.5, 0.5);
 
 	return 0;
 }
@@ -215,6 +215,18 @@ void experiment2(char fname[])
 		image_fuv2[i] = new double[256 * 2 + 1];
 	}
 
+	// Frequency Filter
+	double **real_fuv4 = new double *[256];
+	for (int i = 0; i < 256; i++)
+	{
+		real_fuv4[i] = new double[256 * 2 + 1];
+	}
+	double **image_fuv4 = new double *[256];
+	for (int i = 0; i < 256; i++)
+	{
+		image_fuv4[i] = new double[256 * 2 + 1];
+	}
+
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
@@ -222,10 +234,23 @@ void experiment2(char fname[])
 			baseImage.getPixelVal(i, j, temp);
 			real_fuv2[i][j] = temp;
 			image_fuv2[i][j] = 0;
+			real_fuv4[i][j] = temp;
+			image_fuv4[i][j] = 0;
+		}
+	}
+
+	// Shift the spectrum
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			real_fuv4[i][j] = real_fuv4[i][j] * pow(-1, i + j);
+			image_fuv4[i][j] = image_fuv4[i][j] * pow(-1, i + j);
 		}
 	}
 
 	fft2d(256, 256, real_fuv2, image_fuv2, -1);
+	fft2d(256, 256, real_fuv4, image_fuv4, -1);
 
 	double **real_fuv3 = new double *[256];
 	for (int i = 0; i < 256; i++)
@@ -251,6 +276,63 @@ void experiment2(char fname[])
 		}
 	}
 
+	ImageType finImage_frequency(256, 256, 255);
+	ImageType frequency_spec(256, 256, 255);
+	char finImage_freq[] = "part2_frequency.pgm";
+	char frequency_spectrum[] = "frequency_spec.pgm";
+
+	double magnitude2[256][256];
+	// Calculate magnitude
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			magnitude2[i][j] = sqrt(real_fuv4[i][j] * real_fuv4[i][j] + image_fuv4[i][j] + image_fuv4[i][j]);
+		}
+	}
+
+	// Apply Log for better visualization
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			magnitude2[i][j] = log(1 + magnitude2[i][j]);
+		}
+	}
+
+	rmax2 = magnitude2[0][0];
+	rmin2 = magnitude2[0][0];
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			if (magnitude2[i][j] > rmax2)
+			{
+				rmax2 = magnitude2[i][j];
+			}
+			if (magnitude2[i][j] < rmin2)
+			{
+				rmin2 = magnitude2[i][j];
+			}
+		}
+	}
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			magnitude2[i][j] = 255 * (magnitude2[i][j] - rmin2) / (rmax2 - rmin2);
+		}
+	}
+	// Write to image
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			temp2 = magnitude2[i][j];
+			frequency_spec.setPixelVal(i, j, temp2);
+		}
+	}
+
 	fft2d(256, 256, real_fuv3, image_fuv3, -1);
 
 	// Element-wise complex multiplication
@@ -268,11 +350,6 @@ void experiment2(char fname[])
 	}
 
 	fft2d(256, 256, real_fuv2, image_fuv2, 1);
-
-	ImageType finImage_frequency(256, 256, 255);
-	ImageType frequency_spec(256, 256, 255);
-	char finImage_freq[] = "part2_frequency.pgm";
-	char frequency_spectrum[] = "spatial_spectrum.pgm";
 
 	rmax2 = real_fuv2[0][0];
 	rmin2 = real_fuv2[0][0];
@@ -308,6 +385,7 @@ void experiment2(char fname[])
 	}
 
 	writeImage(finImage_freq, finImage_frequency);
+	writeImage(frequency_spectrum, frequency_spec);
 }
 
 void experiment4(char fname[], float gh, float gl)

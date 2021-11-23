@@ -39,8 +39,10 @@ int main(int argc, char *argv[])
 	char boy[] = "boy_noisy.pgm";
 	char lenna[] = "lenna.pgm";
 
-	experiment2(lenna);
-	// experiment4(girl);
+	//test2dfft();
+
+	//experiment2(lenna);
+	experiment4(girl);
 
 	return 0;
 }
@@ -186,27 +188,16 @@ void experiment4(char fname[])
 		}
 	}
 
-	// Step 1 Ln f(x,y)
-	for (int i = 0; i < 1024; i++)
-	{
-		for (int j = 0; j < 1024; j++)
-		{
-			paddedImage.getPixelVal(i, j, temp);
-			temp = log(temp);
-			paddedImage.setPixelVal(i, j, temp);
-		}
-	}
-
-	// Step 2 FT
+	// Step 1 and 2, ln and FT
 	double **real_fuv = new double *[1024];
 	for (int i = 0; i < 1024; i++)
 	{
-		real_fuv[i] = new double[1024 * 2 + 1];
+		real_fuv[i] = new double[1024];
 	}
 	double **image_fuv = new double *[1024];
 	for (int i = 0; i < 1024; i++)
 	{
-		image_fuv[i] = new double[1024 * 2 + 1];
+		image_fuv[i] = new double[1024];
 	}
 
 	for (int i = 0; i < 1024; i++)
@@ -214,11 +205,11 @@ void experiment4(char fname[])
 		for (int j = 0; j < 1024; j++)
 		{
 			paddedImage.getPixelVal(i, j, temp);
-			real_fuv[i][j] = temp;
+			double temp2 = log(temp + 1);
+			real_fuv[i][j] = temp2;
 			image_fuv[i][j] = 0;
 		}
 	}
-	fft2d(1024, 1024, real_fuv, image_fuv, 1);
 
 	// Shift the spectrum
 	for (int i = 0; i < 1024; i++)
@@ -230,9 +221,11 @@ void experiment4(char fname[])
 		}
 	}
 
+	fft2d(1024, 1024, real_fuv, image_fuv, -1);
+
 	// Step 3 Apply H(u,v)
-	float gamma_H = 1.5, gamma_L = .5, c = 1, D_0 = 1.8;
-	float coef = -c / D_0 / D_0;
+	float gamma_H = 1, gamma_L = 1, c = 1, D_0 = 1.8;
+	float coef = -c / (D_0 * D_0);
 	float gammaDiff = gamma_H - gamma_L;
 	for (int i = 0; i < 1024; i++)
 	{
@@ -245,48 +238,63 @@ void experiment4(char fname[])
 	}
 
 	// Step 4 Inverse FT
-	fft2d(1024, 1024, real_fuv, image_fuv, -1);
-
-	// Normalization
-	float rmax = real_fuv[0][0];
-	float rmin = real_fuv[0][0];
-	for (int i = 0; i < 1024; i++)
-	{
-		for (int j = 0; j < 1024; j++)
-		{
-			if (real_fuv[i][j] > rmax)
-			{
-				rmax = real_fuv[i][j];
-			}
-			if (real_fuv[i][j] < rmin)
-			{
-				rmin = real_fuv[i][j];
-			}
-		}
-	}
-	for (int i = 0; i < 1024; i++)
-	{
-		for (int j = 0; j < 1024; j++)
-		{
-			real_fuv[i][j] = 255 * (real_fuv[i][j] - rmin) / (rmax - rmin);
-		}
-	}
+	fft2d(1024, 1024, real_fuv, image_fuv, 1);
 
 	// Step 5 Take exp
-	ImageType finalImage(512, 512, 255);
-	int temp2;
-	for (int i = 0; i < 512; i++)
+	ImageType finalImage(1024, 1024, 255);
+	for (int i = 0; i < 1024; i++)
 	{
-		for (int j = 0; j < 512; j++)
+		for (int j = 0; j < 1024; j++)
 		{
-			temp2 = real_fuv[i][j];
-			temp2 = exp(temp2);
-			finalImage.setPixelVal(i, j, temp2);
+			temp = real_fuv[i][j] * pow(-1, i + j);
+			temp = exp(temp) - 1;
+			finalImage.setPixelVal(i, j, temp);
 		}
 	}
 
+	// Normalization
+	/*finalImage.getPixelVal(0, 0, temp);
+	float rmax = temp;
+	float rmin = temp;
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			if (temp > rmax)
+			{
+				rmax = temp;
+			}
+			if (temp < rmin)
+			{
+				rmin = temp;
+			}
+		}
+	}
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			temp = 255 * (temp - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}*/
+
+	//print and clean up
 	char finImage[] = "part4.pgm";
 	writeImage(finImage, finalImage);
+
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] real_fuv[i];
+	}
+	delete[] real_fuv;
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] image_fuv[i];
+	}
+	delete[] image_fuv;
 }
 
 void test2dfft()
@@ -300,12 +308,12 @@ void test2dfft()
 	double **real_fuv = new double *[256];
 	for (int i = 0; i < 256; i++)
 	{
-		real_fuv[i] = new double[256 * 2 + 1];
+		real_fuv[i] = new double[256];
 	}
 	double **image_fuv = new double *[256];
 	for (int i = 0; i < 256; i++)
 	{
-		image_fuv[i] = new double[256 * 2 + 1];
+		image_fuv[i] = new double[256];
 	}
 
 	int temp;
@@ -524,13 +532,13 @@ void fft2d(int N, int M, double ** real_fuv, double ** image_fuv, int isign)
 	}
 
 	// Checking if the inverse worked
-	if (isign == 1)
+	/*if (isign == -1)
 	{
 		ImageType final(N, M, 255);
 		datatoimg(final, data);
 		char fft2dtest[] = "test2dfft.pgm";
 		writeImage(fft2dtest, final);
-	}
+	}*/
 
 	//delete the dynamic 2d arrays
 	for(int i = 0; i < N; ++i){

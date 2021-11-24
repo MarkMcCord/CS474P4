@@ -29,6 +29,8 @@ void imgtodata(ImageType &image, float **data);
 void datatoimg(ImageType &image, float **data);
 
 void experiment2(char fname[]);
+void inversefilter(char fname[], float mu, float sigma);
+void wienerfilter(char fname[], float k);
 void experiment4(char fname[], float gh, float gl);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
@@ -42,7 +44,10 @@ int main(int argc, char *argv[])
 	//test2dfft();
 
 	experiment2(lenna);
+
+	inversefilter(lenna, 0, 1);
 	// experiment4(girl, 1.5, 0.5);
+
 
 	return 0;
 }
@@ -386,6 +391,149 @@ void experiment2(char fname[])
 
 	writeImage(finImage_freq, finImage_frequency);
 	writeImage(frequency_spectrum, frequency_spec);
+}
+
+void inversefilter(char fname[], float mu, float sigma){
+	ImageType baseImage(256, 256, 255);
+	ImageType paddedImage(512, 512, 255);
+	readImage(fname, baseImage);
+
+	// Padding base image
+	int temp;
+	double temp2;
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+
+			baseImage.getPixelVal(i, j, temp);
+			paddedImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Step 1, FT
+	double **real_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_fuv[i] = new double [512];
+	}
+	double **image_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_fuv[i] = new double [512];
+	}
+
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			paddedImage.getPixelVal(i, j, temp);
+			real_fuv[i][j] = temp;
+			image_fuv[i][j] = 0;
+		}
+	}
+
+	// Shift the spectrum
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
+			image_fuv[i][j] = image_fuv[i][j] * pow(-1, i + j);
+		}
+	}
+
+	fft2d (512, 512, real_fuv, image_fuv, -1);
+
+	// Step 3 Apply H(u,v) and N(u,v)
+	double a = .1, b = .1, T = 1;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			int i_adj = i - 512 / 2, j_adj = j - 512 / 2;
+			if(i_adj < 0){
+				i_adj = i_adj + 512;
+			}
+			if(j_adj < 0){
+				j_adj = j_adj + 512;
+			}
+			double uavb = (a * i_adj + b * j_adj) * M_PI;
+			//H(u,v) = (T / uavb) * sin(uavb) * (cos(uavb) - jsin(uavb)), therefor:
+			double real_huv = (T / uavb) * sin(uavb) * cos(uavb);
+			double image_huv = (T / uavb) * sin(uavb) * -1 * sin(uavb);
+			real_fuv[i][j] = real_fuv[i][j] * real_huv - image_fuv[i][j] * image_huv;
+			image_fuv[i][j] = real_fuv[i][j] * image_huv + image_fuv[i][j] * real_huv;
+		}
+	}
+
+	// Step 4 Inverse FT
+	fft2d (512, 512, real_fuv, image_fuv, 1);
+	/*for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
+		}
+	}*/
+
+	// Step 5 Take exp
+	ImageType finalImage(256, 256, 255);
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			temp = real_fuv[i][j] * pow(-1, i + j);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Normalization
+	finalImage.getPixelVal(0, 0, temp);
+	float rmax = temp;
+	float rmin = temp;
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			if (temp > rmax)
+			{
+				rmax = temp;
+			}
+			if (temp < rmin)
+			{
+				rmin = temp;
+			}
+		}
+	}
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			temp = 255 * (temp - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	//print and clean up
+	char finImage[] = "inversefiltered.pgm";
+	writeImage(finImage, finalImage);
+
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] real_fuv[i];
+	}
+	delete[] real_fuv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] image_fuv[i];
+	}
+	delete[] image_fuv;
+}
+void wienerfilter(char fname[], float k){
+
 }
 
 void experiment4(char fname[], float gh, float gl)

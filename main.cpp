@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <random>
 
 #include <math.h>
 #define SWAP(a,b) tempr=(a);(a)=(b);(b)=tempr
@@ -29,9 +30,12 @@ void imgtodata(ImageType &image, float **data);
 void datatoimg(ImageType &image, float **data);
 
 void experiment2(char fname[]);
+void degrade(char fname[], float mu, float sigma);
 void inversefilter(char fname[], float mu, float sigma, float radius);
 void wienerfilter(char fname[], float mu, float sigma, float k);
 void experiment4(char fname[], float gh, float gl);
+
+float box_muller(float m, float s);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 
@@ -43,9 +47,9 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	experiment2(lenna);
+	//experiment2(lenna);
 
-	//inversefilter(lenna, 0, 1, 40);
+	inversefilter(lenna, 0, 1, 40);
 	// experiment4(girl, 1.5, 0.5);
 
 
@@ -106,9 +110,6 @@ void experiment2(char fname[])
 	}
 
 	ImageType finalImage_spatial(256, 256, 255);
-	ImageType spatial_spec(256, 256, 255);
-	char finImage_spatial[] = "part2_spatial.pgm";
-	char spatial_spectrum[] = "spatial_spectrum.pgm";
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
@@ -130,6 +131,17 @@ void experiment2(char fname[])
 		image_fuv[i] = new double[256];
 	}
 
+	double **real_fuv2 = new double *[256];
+	for (int i = 0; i < 256; i++)
+	{
+		real_fuv2[i] = new double[256];
+	}
+	double **image_fuv2 = new double *[256];
+	for (int i = 0; i < 256; i++)
+	{
+		image_fuv2[i] = new double[256];
+	}
+
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
@@ -137,6 +149,10 @@ void experiment2(char fname[])
 			baseImage.getPixelVal(i, j, temp);
 			real_fuv[i][j] = temp;
 			image_fuv[i][j] = 0;
+
+			finalImage_spatial.getPixelVal(i, j, temp);
+			real_fuv2[i][j] = temp;
+			image_fuv2[i][j] = 0;
 		}
 	}
 
@@ -147,18 +163,24 @@ void experiment2(char fname[])
 		{
 			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
 			image_fuv[i][j] = image_fuv[i][j] * pow(-1, i + j);
+
+			real_fuv2[i][j] = real_fuv2[i][j] * pow(-1, i + j);
+			image_fuv2[i][j] = image_fuv2[i][j] * pow(-1, i + j);
 		}
 	}
 	// Call 2DFFT
 	fft2d(256, 256, real_fuv, image_fuv, -1);
+	fft2d(256, 256, real_fuv2, image_fuv2, -1);
 
 	double magnitude[256][256];
+	double magnitude2[256][256];
 	// Calculate magnitude
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
 			magnitude[i][j] = sqrt(real_fuv[i][j] * real_fuv[i][j] + image_fuv[i][j] + image_fuv[i][j]);
+			magnitude2[i][j] = sqrt(real_fuv2[i][j] * real_fuv2[i][j] + image_fuv2[i][j] + image_fuv2[i][j]);
 		}
 	}
 
@@ -168,22 +190,34 @@ void experiment2(char fname[])
 		for (int j = 0; j < 256; j++)
 		{
 			magnitude[i][j] = log(1 + magnitude[i][j]);
+			magnitude2[i][j] = log(1 + magnitude2[i][j]);
 		}
 	}
 
-	float rmax2 = magnitude[0][0];
-	float rmin2 = magnitude[0][0];
+	float rmax = magnitude[0][0];
+	float rmin = magnitude[0][0];
+	float rmax2 = magnitude2[0][0];
+	float rmin2 = magnitude2[0][0];
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			if (magnitude[i][j] > rmax2)
+			if (magnitude[i][j] > rmax)
 			{
-				rmax2 = magnitude[i][j];
+				rmax = magnitude[i][j];
 			}
-			if (magnitude[i][j] < rmin2)
+			if (magnitude[i][j] < rmin)
 			{
-				rmin2 = magnitude[i][j];
+				rmin = magnitude[i][j];
+			}
+
+			if (magnitude2[i][j] > rmax2)
+			{
+				rmax2 = magnitude2[i][j];
+			}
+			if (magnitude2[i][j] < rmin2)
+			{
+				rmin2 = magnitude2[i][j];
 			}
 		}
 	}
@@ -191,46 +225,62 @@ void experiment2(char fname[])
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			magnitude[i][j] = 255 * (magnitude[i][j] - rmin2) / (rmax2 - rmin2);
+			magnitude[i][j] = 255 * (magnitude[i][j] - rmin) / (rmax - rmin);
+			magnitude2[i][j] = 255 * (magnitude2[i][j] - rmin2) / (rmax2 - rmin2);
 		}
 	}
 	// Write to image
+
+	ImageType spatial_spec_before(256, 256, 255);
+	ImageType spatial_spec_after(256, 256, 255);
+	char finImage_spatial[] = "part2_spatial.pgm";
+	char spatial_spectrum_before[] = "spatial_spectrum_before.pgm";
+	char spatial_spectrum_after[] = "spatial_spectrum_after.pgm";
+
 	int temp2;
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
 			temp2 = magnitude[i][j];
-			spatial_spec.setPixelVal(i, j, temp2);
+			spatial_spec_before.setPixelVal(i, j, temp2);
+
+			temp2 = magnitude2[i][j];
+			spatial_spec_after.setPixelVal(i, j, temp2);
 		}
 	}
 
-	writeImage(spatial_spectrum, spatial_spec);
+	writeImage(spatial_spectrum_before, spatial_spec_before);
+	writeImage(spatial_spectrum_after, spatial_spec_after);
 	writeImage(finImage_spatial, finalImage_spatial);
 
 	for (int i = 0; i < 256; ++i)
 	{
 		delete[] real_fuv[i];
+		delete[] real_fuv2[i];
 	}
 	delete[] real_fuv;
+	delete[] real_fuv2;
 	for (int i = 0; i < 256; ++i)
 	{
 		delete[] image_fuv[i];
+		delete[] image_fuv2[i];
 	}
 	delete[] image_fuv;
+	delete[] image_fuv2;
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Frequency Filter, image itself
-	double **real_fuv2 = new double *[512];
+	double **real_fuv3 = new double *[512];
 	for (int i = 0; i < 512; i++)
 	{
-		real_fuv2[i] = new double[512];
+		real_fuv3[i] = new double[512];
 	}
-	double **image_fuv2 = new double *[512];
+	double **image_fuv3 = new double *[512];
 	for (int i = 0; i < 512; i++)
 	{
-		image_fuv2[i] = new double[512];
+		image_fuv3[i] = new double[512];
 	}
 
 	// Frequency Filter, image magnitude/spectrum
@@ -251,12 +301,12 @@ void experiment2(char fname[])
 		{
 			if(i < 256 && j < 256){
 				baseImage.getPixelVal(i, j, temp);
-				real_fuv2[i][j] = temp;
-				image_fuv2[i][j] = 0;
+				real_fuv3[i][j] = temp;
+				image_fuv3[i][j] = 0;
 			}
 			else {
-				real_fuv2[i][j] = 0;
-				image_fuv2[i][j] = 0;
+				real_fuv3[i][j] = 0;
+				image_fuv3[i][j] = 0;
 			}
 			// real_fuv4[i][j] = temp;
 			// image_fuv4[i][j] = 0;
@@ -273,24 +323,80 @@ void experiment2(char fname[])
 	// 	}
 	// }
 
-	fft2d(512, 512, real_fuv2, image_fuv2, -1);
+	fft2d(512, 512, real_fuv3, image_fuv3, -1);
 	// fft2d(256, 256, real_fuv4, image_fuv4, -1);
 
-	double **real_fuv3 = new double *[512];
+	double magnitude3[512][512];
+	//Calculate magnitude
 	for (int i = 0; i < 512; i++)
 	{
-		real_fuv3[i] = new double[512];
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude3[i][j] = sqrt(real_fuv3[i][j] * real_fuv3[i][j] + image_fuv3[i][j] + image_fuv3[i][j]);
+		}
 	}
-	double **image_fuv3 = new double *[512];
+
+	//Apply Log for better visualization
 	for (int i = 0; i < 512; i++)
 	{
-		image_fuv3[i] = new double[512];
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude3[i][j] = log(1 + magnitude3[i][j]);
+		}
+	}
+
+	//Normalize
+	float rmax3 = magnitude3[0][0];
+	float rmin3 = magnitude3[0][0];
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			if (magnitude3[i][j] > rmax3)
+			{
+				rmax3 = magnitude3[i][j];
+			}
+			if (magnitude3[i][j] < rmin3)
+			{
+				rmin3 = magnitude3[i][j];
+			}
+		}
+	}
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude3[i][j] = 255 * (magnitude3[i][j] - rmin3) / (rmax3 - rmin3);
+		}
+	}
+	// Write to image
+	ImageType frequency_spec_before(512, 512, 255);
+	char frequency_spectrum_before[] = "frequency_spectrum_before.pgm";
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			temp2 = magnitude3[i][j];
+			frequency_spec_before.setPixelVal(i, j, temp2);
+		}
+	}
+	writeImage(frequency_spectrum_before, frequency_spec_before);
+
+	double **real_huv = new double *[512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_huv[i] = new double[512];
+	}
+	double **image_huv = new double *[512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_huv[i] = new double[512];
 	}
 
 	for (int i = 0; i < 512; i++){
 		for (int j = 0; j < 512; j++){
-			real_fuv3[i][j] = 0;
-			image_fuv3[i][j] = 0;
+			real_huv[i][j] = 0;
+			image_huv[i][j] = 0;
 		}
 	}
 		
@@ -303,8 +409,8 @@ void experiment2(char fname[])
 			int x = 512 / 2 - 1 + i;
 			int y = 512 / 2 - 1 + j;
 
-			real_fuv3[x][y] = sobel_mask[i][j];
-			image_fuv3[x][y] = 0;
+			real_huv[x][y] = sobel_mask[i][j];
+			image_huv[x][y] = 0;
 		}
 	}
 
@@ -365,7 +471,7 @@ void experiment2(char fname[])
 	// 	}
 	// }
 
-	fft2d(512, 512, real_fuv3, image_fuv3, -1);
+	fft2d(512, 512, real_huv, image_huv, -1);
 
 	// Element-wise complex multiplication
 	for (int i = 0; i < 512; i++)
@@ -376,33 +482,110 @@ void experiment2(char fname[])
 			// mask_transform[index] = std::complex<float>(0, mask_transform[index].imag()) * (float)pow(-1, i + j);
 
 			// multiply F(x,y) and H(x,y)
-			real_fuv2[i][j] = real_fuv3[i][j] * real_fuv2[i][j] - image_fuv3[i][j] * image_fuv2[i][j];
-			image_fuv2[i][j] = image_fuv3[i][j] * real_fuv2[i][j] + real_fuv3[i][j] * image_fuv2[i][j];
+			real_fuv3[i][j] = real_huv[i][j] * real_fuv3[i][j] - image_huv[i][j] * image_fuv3[i][j];
+			image_fuv3[i][j] = image_huv[i][j] * real_fuv3[i][j] + real_huv[i][j] * image_fuv3[i][j];
 		}
 	}
 
-	fft2d(512, 512, real_fuv2, image_fuv2, 1);
+	double magnitude4[512][512];
+	double magnitudeh[512][512];
+	//Calculate magnitude
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude4[i][j] = sqrt(real_fuv3[i][j] * real_fuv3[i][j] + image_fuv3[i][j] + image_fuv3[i][j]);
+			magnitudeh[i][j] = sqrt(real_huv[i][j] * real_huv[i][j] + image_huv[i][j] + image_huv[i][j]);
+		}
+	}
 
-	// for (int i = 0; i < 256; i++){
-	// 	for (int j = 0; j < 256; j++){
-	// 		real_fuv2[i][j] *= pow(-1, i + j);
+	//Apply Log for better visualization
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude4[i][j] = log(1 + magnitude4[i][j]);
+			magnitudeh[i][j] = log(1 + magnitudeh[i][j]);
+		}
+	}
+
+	//Normalize
+	float rmax4 = magnitude4[0][0];
+	float rmin4 = magnitude4[0][0];
+	float rmaxh = magnitudeh[0][0];
+	float rminh = magnitudeh[0][0];
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			if (magnitude4[i][j] > rmax4)
+			{
+				rmax4 = magnitude4[i][j];
+			}
+			if (magnitude4[i][j] < rmin4)
+			{
+				rmin4 = magnitude4[i][j];
+			}
+
+			if (magnitudeh[i][j] > rmaxh)
+			{
+				rmaxh = magnitudeh[i][j];
+			}
+			if (magnitudeh[i][j] < rminh)
+			{
+				rminh = magnitudeh[i][j];
+			}
+		}
+	}
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			magnitude4[i][j] = 255 * (magnitude4[i][j] - rmin4) / (rmax4 - rmin4);
+			magnitudeh[i][j] = 255 * (magnitudeh[i][j] - rminh) / (rmaxh - rminh);
+		}
+	}
+	// Write to image
+	ImageType frequency_spec_after(512, 512, 255);
+	char frequency_spectrum_after[] = "frequency_spectrum_after.pgm";
+	ImageType sobel_spec(512, 512, 255);
+	char sobel_spectrum[] = "sobel_spectrum.pgm";
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			temp2 = magnitude4[i][j];
+			frequency_spec_after.setPixelVal(i, j, temp2);
+
+			temp2 = magnitudeh[i][j];
+			sobel_spec.setPixelVal(i, j, temp2);
+		}
+	}
+	writeImage(frequency_spectrum_after, frequency_spec_after);
+	writeImage(sobel_spectrum, sobel_spec);
+
+	fft2d(512, 512, real_fuv3, image_fuv3, 1);
+
+	// for (int i = 0; i < 512; i++){
+	// 	for (int j = 0; j < 512; j++){
+	// 		real_fuv3[i][j] *= pow(-1, i + j);
 	// 	}
 	// }
 		
 
-	rmax2 = real_fuv2[0][0];
-	rmin2 = real_fuv2[0][0];
+	rmax2 = real_fuv3[0][0];
+	rmin2 = real_fuv3[0][0];
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			if (real_fuv2[i][j] > rmax2)
+			if (real_fuv3[i][j] > rmax2)
 			{
-				rmax2 = real_fuv2[i][j];
+				rmax2 = real_fuv3[i][j];
 			}
-			if (real_fuv2[i][j] < rmin2)
+			if (real_fuv3[i][j] < rmin2)
 			{
-				rmin2 = real_fuv2[i][j];
+				rmin2 = real_fuv3[i][j];
 			}
 		}
 	}
@@ -410,7 +593,7 @@ void experiment2(char fname[])
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			real_fuv2[i][j] = 255 * (real_fuv2[i][j] - rmin2) / (rmax2 - rmin2);
+			real_fuv3[i][j] = 255 * (real_fuv3[i][j] - rmin2) / (rmax2 - rmin2);
 		}
 	}
 
@@ -418,7 +601,7 @@ void experiment2(char fname[])
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			temp = real_fuv2[i][j];
+			temp = real_fuv3[i][j];
 			finImage_frequency.setPixelVal(i, j, temp);
 		}
 	}
@@ -428,25 +611,25 @@ void experiment2(char fname[])
 
 	for (int i = 0; i < 512; ++i)
 	{
-		delete[] real_fuv2[i];
 		delete[] real_fuv3[i];
+		delete[] real_huv[i];
 		//delete[] real_fuv4[i];
 	}
-	delete[] real_fuv2;
 	delete[] real_fuv3;
+	delete[] real_huv;
 	//delete[] real_fuv4;
 	for (int i = 0; i < 512; ++i)
 	{
-		delete[] image_fuv2[i];
 		delete[] image_fuv3[i];
+		delete[] image_huv[i];
 		//delete[] image_fuv4[i];
 	}
-	delete[] image_fuv2;
 	delete[] image_fuv3;
+	delete[] image_huv;
 	//delete[] image_fuv4;
 }
 
-void inversefilter(char fname[], float mu, float sigma, float radius){
+void degrade(char fname[], float mu, float sigma){
 	ImageType baseImage(256, 256, 255);
 	ImageType paddedImage(512, 512, 255);
 	readImage(fname, baseImage);
@@ -530,7 +713,146 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 		}
 	}*/
 
-	// Step 5 Take exp
+	// Step 5 uncenter
+	ImageType finalImage(256, 256, 255);
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			temp = real_fuv[i][j] * pow(-1, i + j);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	//noise
+	random_device rd{};
+	mt19937 gen{rd()};
+	normal_distribution<> d{mu, sigma};
+	for(int i = 0; i < 256; i++){
+		for(int j = 0; j < 256; j++){
+			finalImage.getPixelVal(i, j, temp);
+			temp = temp + round(d(gen));
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Normalization
+	finalImage.getPixelVal(0, 0, temp);
+	float rmax = temp;
+	float rmin = temp;
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			if (temp > rmax)
+			{
+				rmax = temp;
+			}
+			if (temp < rmin)
+			{
+				rmin = temp;
+			}
+		}
+	}
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			temp = 255 * (temp - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	//print and clean up
+	char finImage[] = "degraded.pgm";
+	writeImage(finImage, finalImage);
+
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] real_fuv[i];
+	}
+	delete[] real_fuv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] image_fuv[i];
+	}
+	delete[] image_fuv;
+}
+void inversefilter(char fname[], float mu, float sigma, float radius){
+	degrade(fname, mu, sigma);
+	char degImage[] = "degraded.pgm";
+	ImageType degradedImage(256, 256, 255);
+	ImageType paddedImage(512, 512, 255);
+	readImage(degImage, degradedImage);
+
+	// Padding base image
+	int temp;
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+
+			degradedImage.getPixelVal(i, j, temp);
+			paddedImage.setPixelVal(i, j, temp);
+		}
+	}
+	
+	// Step 1, FT
+	double **real_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_fuv[i] = new double [512];
+	}
+	double **image_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_fuv[i] = new double [512];
+	}
+
+	//center
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			paddedImage.getPixelVal(i, j, temp);
+			real_fuv[i][j] = temp * pow(-1, i + j);
+			image_fuv[i][j] = 0;
+		}
+	}
+
+	fft2d (512, 512, real_fuv, image_fuv, -1);
+
+	// complex division by H(u,v)
+	double a = .1, b = .1, T = 1;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			int i_adj = i - 512 / 2, j_adj = j - 512 / 2;
+			double uavb = (a * i_adj + b * j_adj) * M_PI;
+			//H(u,v) = (T / uavb) * sin(uavb) * (cos(uavb) - jsin(uavb)), therefor:
+			double real_huv = (T / uavb) * sin(uavb) * cos(uavb);
+			double image_huv = (T / uavb) * sin(uavb) * -1 * sin(uavb);
+			//none of this works at (256, 256), use limit as uavb approaches 0
+			if (uavb == 0){
+				real_huv = 1;
+				image_huv = 0;
+			}
+			if((i_adj * i_adj + j_adj * j_adj) <= (radius * radius)){
+				real_fuv[i][j] = (real_fuv[i][j] * real_huv + image_fuv[i][j] * image_huv) / (real_huv * real_huv + image_huv * image_huv);
+				image_fuv[i][j] = (image_fuv[i][j] * real_huv - real_fuv[i][j] * image_huv) / (real_huv * real_huv + image_huv * image_huv);
+			}
+			//cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
+			
+		}
+	}
+
+	// Step 4 Inverse FT
+	fft2d (512, 512, real_fuv, image_fuv, 1);
+
+	// Step 5 uncenter
 	ImageType finalImage(256, 256, 255);
 	for (int i = 0; i < 256; i++)
 	{
@@ -570,6 +892,15 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 		}
 	}
 
+
+	// for (int i = 0; i < 512; i++)
+	// {
+	// 	for (int j = 0; j < 512; j++)
+	// 	{
+	// 		cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
+	// 	}
+	// }
+
 	//print and clean up
 	char finImage[] = "inversefiltered.pgm";
 	writeImage(finImage, finalImage);
@@ -584,8 +915,9 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 		delete[] image_fuv[i];
 	}
 	delete[] image_fuv;
+
 }
-void wienerfilter(char fname[], float k){
+void wienerfilter(char fname[], float mu, float sigma, float k){
 
 }
 
@@ -709,7 +1041,7 @@ void experiment4(char fname[], float gh, float gl)
 	}
 
 	//print and clean up
-	char finImage[] = "part4.pgm";
+	char finImage[] = "part4_blurred.pgm";
 	writeImage(finImage, finalImage);
 
 	for (int i = 0; i < 1024; ++i)
@@ -980,4 +1312,34 @@ void fft2d(int N, int M, double ** real_fuv, double ** image_fuv, int isign)
     	delete[] data[i];
 	}
 	delete[] data;
+}
+
+float box_muller(float m, float s) /* normal random variate generator */
+{ /* mean m, standard deviation s */
+default_random_engine generator;
+uniform_real_distribution<double> distribution(0.0,1.0);
+float x1, x2, w, y1;
+static float y2;
+static int use_last = 0;
+
+if (use_last) /* use value from previous call */
+{
+y1 = y2;
+use_last = 0;
+}
+else
+{
+do {
+x1 = 2.0 * distribution(generator) - 1.0;
+x2 = 2.0 * distribution(generator) - 1.0;
+w = x1 * x1 + x2 * x2;
+} while ( w >= 1.0 );
+
+w = sqrt( (-2.0 * log( w ) ) / w );
+y1 = x1 * w;
+y2 = x2 * w;
+use_last = 1;
+}
+
+return( m + y1 * s );
 }

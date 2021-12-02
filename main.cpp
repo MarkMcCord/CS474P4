@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <complex>
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -21,7 +22,7 @@
 using namespace std;
 
 void readImage(char fname[], ImageType &image);
-void writeImage(char fname[], ImageType &image);
+void writeImage(const char fname[], ImageType &image);
 void fft(float data[], unsigned long nn, int isign);
 
 void test2dfft();
@@ -31,10 +32,12 @@ void datatoimg(ImageType &image, float **data);
 
 void experiment1(char fname[]);
 void experiment2(char fname[]);
-void degrade(char fname[], float mu, float sigma);
+void degrade(char fname[], float mu, float sigma, double **real_fuv, double **image_fuv);
 void inversefilter(char fname[], float mu, float sigma, float radius);
 void wienerfilter(char fname[], float mu, float sigma, float k);
 void experiment4(char fname[], float gh, float gl);
+
+void visualizespectrum(double **real, double **image, int M, int N, const char name[]);
 
 float box_muller(float m, float s);
 
@@ -68,6 +71,55 @@ int main(int argc, char *argv[])
 
 
 	return 0;
+}
+
+void visualizespectrum(double **real, double **image, int M, int N, const char name[]){
+	double **spec = new double *[M];
+	for (int i = 0; i < M; i++)
+	{
+		spec[i] = new double[N];
+	}
+	ImageType spectrum(M, N, 255);
+	for (int i = 0; i < M; i++)
+	{
+		for (int j = 0; j < N; j++)
+		{
+			spec[i][j] = sqrt(real[i][j] * real[i][j] + image[i][j] * image[i][j]);
+			spec[i][j] = log(1 + spec[i][j]);
+		}
+	}
+	// Normalization
+	float max = spec[0][0];
+	float min = spec[0][0];
+	for (int i = 0; i < M; i++)
+	{
+		for (int j = 0; j < N; j++)
+		{
+			if (spec[i][j] > max)
+			{
+				max = spec[i][j];
+			}
+			if (spec[i][j] < min)
+			{
+				min = spec[i][j];
+			}
+		}
+	}
+	for (int i = 0; i < M; i++)
+	{
+		for (int j = 0; j < N; j++)
+		{
+			spec[i][j] = 255 * (spec[i][j] - min) / (max - min);
+			spectrum.setPixelVal(i, j, spec[i][j]);
+		}
+	}
+	writeImage(name, spectrum);
+
+	for (int i = 0; i < M; ++i)
+	{
+		delete[] spec[i];
+	}
+	delete[] spec;
 }
 
 void experiment1(char fname[])
@@ -799,57 +851,52 @@ void experiment2(char fname[])
 	//delete[] image_fuv4;
 }
 
-void degrade(char fname[], float mu, float sigma){
-	ImageType baseImage(256, 256, 255);
-	ImageType paddedImage(512, 512, 255);
-	readImage(fname, baseImage);
-
-	// Padding base image
-	int temp;
-	double temp2;
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-
-			baseImage.getPixelVal(i, j, temp);
-			paddedImage.setPixelVal(i, j, temp);
-		}
-	}
-
+void degrade(char fname[], float mu, float sigma, double ** real_fuv, double ** image_fuv){
 	// Step 1, FT
-	double **real_fuv = new double * [512];
+	double **copyr = new double * [512];
 	for (int i = 0; i < 512; i++)
 	{
-		real_fuv[i] = new double [512];
+		copyr[i] = new double [512];
 	}
-	double **image_fuv = new double * [512];
+	double **copyi = new double * [512];
 	for (int i = 0; i < 512; i++)
 	{
-		image_fuv[i] = new double [512];
+		copyi[i] = new double [512];
 	}
 
+	double **noiser = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		noiser[i] = new double [512];
+	}
+	double **noisei = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		noisei[i] = new double [512];
+	}
 	for (int i = 0; i < 512; i++)
 	{
 		for (int j = 0; j < 512; j++)
 		{
-			paddedImage.getPixelVal(i, j, temp);
-			real_fuv[i][j] = temp;
-			image_fuv[i][j] = 0;
+			noiser[i][j] = 0;
+			noisei[i][j] = 0;
 		}
 	}
 
-	// Shift the spectrum
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
-			image_fuv[i][j] = image_fuv[i][j] * pow(-1, i + j);
+	//noise
+	random_device rd{};
+	mt19937 gen{rd()};
+	normal_distribution<> d{mu, sigma};
+	for(int i = 0; i < 256; i++){
+		for(int j = 0; j < 256; j++){
+			noiser[i][j] = round(d(gen));
 		}
 	}
 
 	fft2d (512, 512, real_fuv, image_fuv, -1);
+	fft2d (512, 512, noiser, noisei, -1);
+
+	visualizespectrum(real_fuv, image_fuv, 512, 512, "lenna_spec_before.pgm");
 
 	// Step 3 Apply H(u,v) and N(u,v)
 	double a = .1, b = .1, T = 1;
@@ -863,65 +910,58 @@ void degrade(char fname[], float mu, float sigma){
 			double real_huv = (T / uavb) * sin(uavb) * cos(uavb);
 			double image_huv = (T / uavb) * sin(uavb) * -1 * sin(uavb);
 			//none of this works at (256, 256), use limit as uavb approaches 0
-			if (uavb == 0){
+			if (i_adj == -j_adj){
 				real_huv = 1;
 				image_huv = 0;
 			}
-			real_fuv[i][j] = real_fuv[i][j] * real_huv - image_fuv[i][j] * image_huv;
-			image_fuv[i][j] = real_fuv[i][j] * image_huv + image_fuv[i][j] * real_huv;
+			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
+			complex<double> h(real_huv, image_huv);
+			complex<double> fh = f * h;
+			real_fuv[i][j] = fh.real();
+			image_fuv[i][j] = fh.imag();
+			real_fuv[i][j] = real_fuv[i][j] + noiser[i][j];
+			image_fuv[i][j] = image_fuv[i][j] + noisei[i][j];
 			
 		}
 	}
 
-	// Step 4 Inverse FT
-	fft2d (512, 512, real_fuv, image_fuv, 1);
-	/*for (int i = 0; i < 512; i++)
+	visualizespectrum(real_fuv, image_fuv, 512, 512, "lenna_spec_after.pgm");
+
+	for (int i = 0; i < 512; i++)
 	{
 		for (int j = 0; j < 512; j++)
 		{
-			cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
+			copyr[i][j] = real_fuv[i][j];
+			copyi[i][j] = image_fuv[i][j];
 		}
-	}*/
+	}
 
-	// Step 5 uncenter
+	// Step 4 Inverse FT
+	fft2d (512, 512, copyr, copyi, 1);
+
+	//Step 5 uncenter
 	ImageType finalImage(256, 256, 255);
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			temp = real_fuv[i][j] * pow(-1, i + j);
-			finalImage.setPixelVal(i, j, temp);
+			copyr[i][j] *= pow(-1, i + j);
 		}
 	}
 
-	//noise
-	random_device rd{};
-	mt19937 gen{rd()};
-	normal_distribution<> d{mu, sigma};
-	for(int i = 0; i < 256; i++){
-		for(int j = 0; j < 256; j++){
-			finalImage.getPixelVal(i, j, temp);
-			temp = temp + round(d(gen));
-			finalImage.setPixelVal(i, j, temp);
-		}
-	}
-
-	// Normalization
-	finalImage.getPixelVal(0, 0, temp);
-	float rmax = temp;
-	float rmin = temp;
+	int max = copyr[0][0];
+	int min = copyr[0][0];
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			finalImage.getPixelVal(i, j, temp);
-			if (temp > rmax)
+			if (copyr[i][j] > max)
 			{
-				rmax = temp;
+				max = copyr[i][j];
 			}
-			if (temp < rmin)
+			if (copyr[i][j] < min)
 			{
-				rmin = temp;
+				min = copyr[i][j];
 			}
 		}
 	}
@@ -929,9 +969,15 @@ void degrade(char fname[], float mu, float sigma){
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			finalImage.getPixelVal(i, j, temp);
-			temp = 255 * (temp - rmin) / (rmax - rmin);
-			finalImage.setPixelVal(i, j, temp);
+			copyr[i][j] = 255 * (copyr[i][j] - min) / (max - min);
+		}
+	}
+
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			finalImage.setPixelVal(i, j, copyr[i][j]);
 		}
 	}
 
@@ -941,21 +987,30 @@ void degrade(char fname[], float mu, float sigma){
 
 	for (int i = 0; i < 512; ++i)
 	{
-		delete[] real_fuv[i];
+		delete[] copyr[i];
 	}
-	delete[] real_fuv;
+	delete[] copyr;
 	for (int i = 0; i < 512; ++i)
 	{
-		delete[] image_fuv[i];
+		delete[] copyi[i];
 	}
-	delete[] image_fuv;
+	delete[] copyi;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] noiser[i];
+	}
+	delete[] noiser;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] noisei[i];
+	}
+	delete[] noisei;
 }
 void inversefilter(char fname[], float mu, float sigma, float radius){
-	degrade(fname, mu, sigma);
 	char degImage[] = "degraded.pgm";
 	ImageType degradedImage(256, 256, 255);
 	ImageType paddedImage(512, 512, 255);
-	readImage(degImage, degradedImage);
+	readImage(fname, degradedImage);
 
 	// Padding base image
 	int temp;
@@ -980,6 +1035,16 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 	{
 		image_fuv[i] = new double [512];
 	}
+	double **real_huv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_huv[i] = new double [512];
+	}
+	double **image_huv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_huv[i] = new double [512];
+	}
 
 	//center
 	for (int i = 0; i < 512; i++)
@@ -991,8 +1056,9 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 			image_fuv[i][j] = 0;
 		}
 	}
+	degrade(fname, mu, sigma, real_fuv, image_fuv);
 
-	fft2d (512, 512, real_fuv, image_fuv, -1);
+	// fft2d (512, 512, real_fuv, image_fuv, -1);
 
 	// complex division by H(u,v)
 	double a = .1, b = .1, T = 1;
@@ -1003,21 +1069,26 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 			int i_adj = i - 512 / 2, j_adj = j - 512 / 2;
 			double uavb = (a * i_adj + b * j_adj) * M_PI;
 			//H(u,v) = (T / uavb) * sin(uavb) * (cos(uavb) - jsin(uavb)), therefor:
-			double real_huv = (T / uavb) * sin(uavb) * cos(uavb);
-			double image_huv = (T / uavb) * sin(uavb) * -1 * sin(uavb);
+			real_huv[i][j] = (T / uavb) * sin(uavb) * cos(uavb);
+			image_huv[i][j] = (T / uavb) * sin(uavb) * -1 * sin(uavb);
 			//none of this works at (256, 256), use limit as uavb approaches 0
-			if (uavb == 0){
-				real_huv = 1;
-				image_huv = 0;
+			if (i_adj == -j_adj){
+				real_huv[i][j] = 1;
+				image_huv[i][j] = 0;
 			}
-			if((i_adj * i_adj + j_adj * j_adj) <= (radius * radius)){
-				real_fuv[i][j] = (real_fuv[i][j] * real_huv + image_fuv[i][j] * image_huv) / (real_huv * real_huv + image_huv * image_huv);
-				image_fuv[i][j] = (image_fuv[i][j] * real_huv - real_fuv[i][j] * image_huv) / (real_huv * real_huv + image_huv * image_huv);
+			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
+			complex<double> h(real_huv[i][j], image_huv[i][j]);
+			complex<double> fh = f / h;
+			if(sqrt(i_adj * i_adj + j_adj * j_adj) <= radius){
+				// real_fuv[i][j] = (real_fuv[i][j] * real_huv[i][j] + image_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
+				// image_fuv[i][j] = (image_fuv[i][j] * real_huv[i][j] - real_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
+				real_fuv[i][j] = fh.real();
+				image_fuv[i][j] = fh.imag();
 			}
-			//cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
-			
 		}
 	}
+	visualizespectrum(real_huv, image_huv, 512, 512, "h_spectrum.pgm");
+	visualizespectrum(real_fuv, image_fuv, 512, 512, "lennainversespec.pgm");
 
 	// Step 4 Inverse FT
 	fft2d (512, 512, real_fuv, image_fuv, 1);
@@ -1028,27 +1099,24 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			temp = real_fuv[i][j] * pow(-1, i + j);
-			finalImage.setPixelVal(i, j, temp);
+			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
 		}
 	}
 
 	// Normalization
-	finalImage.getPixelVal(0, 0, temp);
-	float rmax = temp;
-	float rmin = temp;
+	float rmax = real_fuv[0][0];
+	float rmin = real_fuv[0][0];
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			finalImage.getPixelVal(i, j, temp);
-			if (temp > rmax)
+			if (real_fuv[i][j] > rmax)
 			{
-				rmax = temp;
+				rmax = real_fuv[i][j];
 			}
-			if (temp < rmin)
+			if (real_fuv[i][j] < rmin)
 			{
-				rmin = temp;
+				rmin = real_fuv[i][j];
 			}
 		}
 	}
@@ -1056,9 +1124,8 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 	{
 		for (int j = 0; j < 256; j++)
 		{
-			finalImage.getPixelVal(i, j, temp);
-			temp = 255 * (temp - rmin) / (rmax - rmin);
-			finalImage.setPixelVal(i, j, temp);
+			real_fuv[i][j] = 255 * (real_fuv[i][j] - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, real_fuv[i][j]);
 		}
 	}
 
@@ -1085,6 +1152,16 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 		delete[] image_fuv[i];
 	}
 	delete[] image_fuv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] real_huv[i];
+	}
+	delete[] real_huv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] image_huv[i];
+	}
+	delete[] image_huv;
 
 }
 void wienerfilter(char fname[], float mu, float sigma, float k){

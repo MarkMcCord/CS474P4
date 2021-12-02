@@ -7,7 +7,7 @@ using namespace std;
 
 #include "image.h"
 
-void writeImage(char fname[], ImageType& image)
+void writeImage(const char fname[], ImageType& image)
 {
  int i, j;
  int N, M, Q;

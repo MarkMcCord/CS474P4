@@ -29,6 +29,7 @@ void fft2d(int N, int M, double **real_fuv, double **image_fuv, int isign);
 void imgtodata(ImageType &image, float **data);
 void datatoimg(ImageType &image, float **data);
 
+void experiment1(char fname[]);
 void experiment2(char fname[]);
 void degrade(char fname[], float mu, float sigma);
 void inversefilter(char fname[], float mu, float sigma, float radius);
@@ -39,6 +40,18 @@ float box_muller(float m, float s);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 
+static const int mask_7x7[7][7] = {
+
+	{1, 1, 2, 2, 2, 1, 1},
+	{1, 2, 2, 4, 2, 2, 1},
+	{2, 2, 4, 8, 4, 2, 2},
+	{2, 4, 8, 16, 8, 4, 2},
+	{2, 2, 4, 8, 4, 2, 2},
+	{1, 2, 2, 4, 2, 2, 1},
+	{1, 1, 2, 2, 2, 1, 1}
+
+};
+
 int main(int argc, char *argv[])
 {
 	char girl[] = "girl.pgm";
@@ -47,13 +60,153 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	//experiment2(lenna);
+	experiment1(boy);
+	// experiment2(lenna);
 
 	inversefilter(lenna, 0, 1, 40);
 	// experiment4(girl, 1.5, 0.5);
 
 
 	return 0;
+}
+
+void experiment1(char fname[])
+{
+	ImageType baseImage(512, 512, 255);
+	ImageType paddedImage(1024, 1024, 255);
+	readImage(fname, baseImage);
+
+	// Part A-------------------------------------------------------------------------------------------------------------------------
+	//  Padding base image
+	int temp;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			baseImage.getPixelVal(i, j, temp);
+			paddedImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Step 1, FT
+	double **real_fuv = new double *[1024];
+	for (int i = 0; i < 1024; i++)
+	{
+		real_fuv[i] = new double[1024];
+	}
+	double **image_fuv = new double *[1024];
+	for (int i = 0; i < 1024; i++)
+	{
+		image_fuv[i] = new double[1024];
+	}
+
+	// center
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			paddedImage.getPixelVal(i, j, temp);
+			real_fuv[i][j] = temp * pow(-1, i + j);
+			image_fuv[i][j] = 0;
+		}
+	}
+
+	fft2d(1024, 1024, real_fuv, image_fuv, -1);
+
+	double spectrum[1024][1024];
+	// complex division by H(u,v)
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			// Band-Reject
+			// H(u,v) = 1 / 1 + [ DW / D^2 - D0^2 ]^2n
+			int i_adj = i - 1024 / 2, j_adj = j - 1024 / 2;
+			double D = sqrt(i_adj * i_adj + j_adj * j_adj);
+			double DW = D * 1;
+			double DD0 = D * D - 35.5 * 35.5;
+			double denom = 1 + pow(DW / DD0, 2 * 4);
+			double H = 1 / denom;
+
+			// Calculate spetrum
+			// spectrum[i][j] = sqrt(real_fuv[i][j] * real_fuv[i][j] + image_fuv[i][j] + image_fuv[i][j]);
+
+			real_fuv[i][j] = real_fuv[i][j] * H;
+			image_fuv[i][j] = image_fuv[i][j] * H;
+
+			// cout << H << " " << endl;
+		}
+	}
+	// // Print spectrum
+	// char boySpectrum[] = "boySpec.pgm";
+	// ImageType boySpec(512, 512, 255);
+	// for (int i = 0; i < 512; i++)
+	// {
+	// 	for (int j = 0; j < 512; j++)
+	// 	{
+	// 		temp = spectrum[i][j] * pow(-1, i + j);
+	// 		boySpec.setPixelVal(i, j, temp);
+	// 	}
+	// }
+	// writeImage(boySpectrum, boySpec);
+
+	// Step 4 Inverse FT
+	fft2d(1024, 1024, real_fuv, image_fuv, 1);
+
+	// Step 5 uncenter
+	ImageType finalImage(512, 512, 255);
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			temp = real_fuv[i][j] * pow(-1, i + j);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// Normalization
+	finalImage.getPixelVal(0, 0, temp);
+	float rmax = temp;
+	float rmin = temp;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			if (temp > rmax)
+			{
+				rmax = temp;
+			}
+			if (temp < rmin)
+			{
+				rmin = temp;
+			}
+		}
+	}
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			finalImage.getPixelVal(i, j, temp);
+			temp = 255 * (temp - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, temp);
+		}
+	}
+
+	// print and clean up
+	char finImage_reject[] = "reject.pgm";
+	writeImage(finImage_reject, finalImage);
+
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] real_fuv[i];
+	}
+	delete[] real_fuv;
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] image_fuv[i];
+	}
+	delete[] image_fuv;
 }
 
 void experiment2(char fname[])

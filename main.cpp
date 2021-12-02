@@ -113,7 +113,34 @@ void experiment1(char fname[])
 
 	fft2d(1024, 1024, real_fuv, image_fuv, -1);
 
-	double spectrum[1024][1024];
+	double **spectrum = new double *[1024];
+	for (int i = 0; i < 1024; i++)
+	{
+		spectrum[i] = new double[1024];
+	}
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			// Calculate spectrum
+			spectrum[i][j] = sqrt(real_fuv[i][j] * real_fuv[i][j] + image_fuv[i][j] + image_fuv[i][j]);
+			spectrum[i][j] = log(1 + spectrum[i][j]);
+		}
+		
+	}
+	// Print spectrum
+	char boySpectrum[] = "boySpec.pgm";
+	ImageType boySpec(1024, 1024, 255);
+	for (int i = 0; i < 1024; i++)
+	{
+		for (int j = 0; j < 1024; j++)
+		{
+			temp = spectrum[i][j] * pow(-1, i + j);
+			boySpec.setPixelVal(i, j, temp);
+		}
+	}
+	writeImage(boySpectrum, boySpec);
+	
 	// complex division by H(u,v)
 	for (int i = 0; i < 1024; i++)
 	{
@@ -128,27 +155,12 @@ void experiment1(char fname[])
 			double denom = 1 + pow(DW / DD0, 2 * 4);
 			double H = 1 / denom;
 
-			// Calculate spetrum
-			// spectrum[i][j] = sqrt(real_fuv[i][j] * real_fuv[i][j] + image_fuv[i][j] + image_fuv[i][j]);
-
 			real_fuv[i][j] = real_fuv[i][j] * H;
 			image_fuv[i][j] = image_fuv[i][j] * H;
 
 			// cout << H << " " << endl;
 		}
 	}
-	// // Print spectrum
-	// char boySpectrum[] = "boySpec.pgm";
-	// ImageType boySpec(512, 512, 255);
-	// for (int i = 0; i < 512; i++)
-	// {
-	// 	for (int j = 0; j < 512; j++)
-	// 	{
-	// 		temp = spectrum[i][j] * pow(-1, i + j);
-	// 		boySpec.setPixelVal(i, j, temp);
-	// 	}
-	// }
-	// writeImage(boySpectrum, boySpec);
 
 	// Step 4 Inverse FT
 	fft2d(1024, 1024, real_fuv, image_fuv, 1);
@@ -207,6 +219,11 @@ void experiment1(char fname[])
 		delete[] image_fuv[i];
 	}
 	delete[] image_fuv;
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] spectrum[i];
+	}
+	delete[] spectrum;
 }
 
 void experiment2(char fname[])

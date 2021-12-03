@@ -42,19 +42,30 @@ void visualizespectrum(double **real, double **image, int M, int N, const char n
 
 float box_muller(float m, float s);
 double generateGaussianNoise(const double &variance);
+void smoothing(char fname[], int size, bool G);
+ImageType padding(char fname[], int size);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 
-static const int mask_7x7[7][7] = {
+static int g7[7][7] = {{1, 1, 2, 2, 2, 1, 1}, {1, 2, 2, 4, 2, 2, 1}, {2, 2, 4, 8, 4, 2, 2}, {2, 4, 8, 16, 8, 4, 2},
+                       {2, 2, 4, 8, 4, 2, 2}, {1, 2, 2, 4, 2, 2, 1}, {1, 1, 2, 2, 2, 1, 1}};
 
-	{1, 1, 2, 2, 2, 1, 1},
-	{1, 2, 2, 4, 2, 2, 1},
-	{2, 2, 4, 8, 4, 2, 2},
-	{2, 4, 8, 16, 8, 4, 2},
-	{2, 2, 4, 8, 4, 2, 2},
-	{1, 2, 2, 4, 2, 2, 1},
-	{1, 1, 2, 2, 2, 1, 1}
-
+static int g15[15][15] = {
+    {2, 2, 3, 4, 5, 5, 6, 6, 6, 5, 5, 4, 3, 2, 2},
+    {2, 3, 4, 5, 7, 7, 8, 8, 8, 7, 7, 5, 4, 3, 2},
+    {3, 4, 6, 7, 9, 10, 10, 11, 10, 10, 9, 7, 6, 4, 3},
+    {4, 5, 7, 9, 10, 12, 13, 13, 13, 12, 10, 9, 7, 5, 4},
+    {5, 7, 9, 11, 13, 14, 15, 16, 15, 14, 13, 11, 9, 7, 5},
+    {5, 7, 10, 12, 14, 16, 17, 18, 17, 16, 14, 12, 10, 7, 5},
+    {6, 8, 10, 13, 15, 17, 19, 19, 19, 17, 15, 13, 10, 8, 6},
+    {6, 8, 11, 13, 16, 18, 19, 20, 19, 18, 16, 13, 11, 8, 6},
+    {6, 8, 10, 13, 15, 17, 19, 19, 19, 17, 15, 13, 10, 8, 6},
+    {5, 7, 10, 12, 14, 16, 17, 18, 17, 16, 14, 12, 10, 7, 5},
+    {5, 7, 9, 11, 13, 14, 15, 16, 15, 14, 13, 11, 9, 7, 5},
+    {4, 5, 7, 9, 10, 12, 13, 13, 13, 12, 10, 9, 7, 5, 4},
+    {3, 4, 6, 7, 9, 10, 10, 11, 10, 10, 9, 7, 6, 4, 3},
+    {2, 3, 4, 5, 7, 7, 8, 8, 8, 7, 7, 5, 4, 3, 2},
+    {2, 2, 3, 4, 5, 5, 6, 6, 6, 5, 5, 4, 3, 2, 2},
 };
 
 int main(int argc, char *argv[])
@@ -66,6 +77,7 @@ int main(int argc, char *argv[])
 	//test2dfft();
 
 	bandrejectfilter(boy);
+	notchfilter(boy, false);
 	notchfilter(boy, true);
 
 	// experiment2(lenna);
@@ -253,6 +265,8 @@ void bandrejectfilter(char fname[])
 		delete[] image_fuv[i];
 	}
 	delete[] image_fuv;
+	smoothing(fname, 7, true);
+	smoothing(fname, 15, true);
 }
 
 void notchfilter(char fname[], bool noise)
@@ -306,12 +320,12 @@ void notchfilter(char fname[], bool noise)
 		for (int j = 0; j < 1024; j++)
 		{
 			int i_adj = i - 1024 / 2, j_adj = j - 1024 / 2;
-			if(!noise && (abs(i_adj) >= 31 && abs(i_adj) <= 33) && (abs(j_adj) >= 63 && abs(j_adj) <= 65))
+			if(!noise && ((abs(i_adj) >= 31 && abs(i_adj) <= 33) || (abs(j_adj) >= 63 && abs(j_adj) <= 65)))
 			{
 				real_fuv[i][j] = 0;
 				image_fuv[i][j] = 0;
 			}
-			if(noise && !(abs(i_adj) >= 31 && abs(i_adj) <= 33) && (abs(j_adj) >= 63 && abs(j_adj) <= 65))
+			if(noise && !((abs(i_adj) >= 31 && abs(i_adj) <= 33) || (abs(j_adj) >= 63 && abs(j_adj) <= 65)))
 			{
 				real_fuv[i][j] = 0;
 				image_fuv[i][j] = 0;
@@ -366,6 +380,12 @@ void notchfilter(char fname[], bool noise)
 
 	// print and clean up
 	char finImage_reject[] = "boyNotch.pgm";
+	if(noise)
+	{
+		finImage_reject[5] = 'i';
+		finImage_reject[6] = 's';
+		finImage_reject[7] = 'e';
+	}
 	writeImage(finImage_reject, finalImage);
 
 	for (int i = 0; i < 1024; ++i)
@@ -606,9 +626,6 @@ void experiment2(char fname[])
 	{
 		for (int j = 0; j < 512; j++)
 		{
-			// set real part to zero, undo cenetering of sobel mask
-			// mask_transform[index] = std::complex<float>(0, mask_transform[index].imag()) * (float)pow(-1, i + j);
-
 			// multiply F(x,y) and H(x,y)
 			real_fuv3[i][j] = real_huv[i][j] * real_fuv3[i][j] - image_huv[i][j] * image_fuv3[i][j];
 			image_fuv3[i][j] = image_huv[i][j] * real_fuv3[i][j] + real_huv[i][j] * image_fuv3[i][j];
@@ -1585,4 +1602,94 @@ double generateGaussianNoise(const double &variance)
     rand2 = (rand() / ((double) RAND_MAX)) * 2 * M_PI;
   
     return sqrt(variance * rand1) * cos(rand2);
+}
+
+void smoothing(char fname[], int size, bool G) {
+	ImageType originalImage = padding(fname, size);
+	ImageType smoothImage(512, 512, 255);
+
+	char newfname[] = "smooth_i_i_i.pgm";
+	newfname[7]     = fname[0];
+	if (G) {
+		newfname[9] = 'G';
+	} else {
+		newfname[9] = 'A';
+	}
+	newfname[11] = '0' + (size % 10);
+
+	int sum    = 0;
+	int factor = 0;
+	int temp;
+	if (!G) {
+		for (int i = 0; i < 512; i++) {
+			for (int j = 0; j < 512; j++) {  // for each pixel in the original image
+				for (int k = i; k < i + size; k++) {
+					for (int l = j; l < j + size; l++) {  // for each weight in the mask
+						originalImage.getPixelVal(k, l, temp);
+						sum = sum + temp;
+						// cout << k << ", " << l << endl;
+					}
+				}
+				// calculate sum
+				sum = sum / (size * size);
+				smoothImage.setPixelVal(i, j, sum);
+				// cout << "Pixel " << i << ", " << j << endl;
+				sum = 0;
+			}
+		}
+	} else if (size == 7) {
+		for (int i = 0; i < 512; i++) {
+			for (int j = 0; j < 512; j++) {  // for each pixel in the original image
+				for (int k = i; k < i + size; k++) {
+					for (int l = j; l < j + size; l++) {  // for each weight in the mask
+						originalImage.getPixelVal(k, l, temp);
+						sum    = sum + (temp * g7[k - i][l - j]);
+						factor = factor + g7[k - i][l - j];
+						// cout << k << ", " << l << endl;
+					}
+				}
+				// calculate sum
+				sum = sum / factor;
+				smoothImage.setPixelVal(i, j, sum);
+				// cout << "Pixel " << i << ", " << j << endl;
+				sum    = 0;
+				factor = 0;
+			}
+		}
+	} else if (size == 15) {
+		for (int i = 0; i < 512; i++) {
+			for (int j = 0; j < 512; j++) {  // for each pixel in the original image
+				for (int k = i; k < i + size; k++) {
+					for (int l = j; l < j + size; l++) {  // for each weight in the mask
+						originalImage.getPixelVal(k, l, temp);
+						sum    = sum + (temp * g15[k - i][l - j]);
+						factor = factor + g15[k - i][l - j];
+						// cout << k << ", " << l << endl;
+					}
+				}
+				// calculate sum
+				sum = sum / factor;
+				smoothImage.setPixelVal(i, j, sum);
+				// cout << "Pixel " << i << ", " << j << endl;
+				sum    = 0;
+				factor = 0;
+			}
+		}
+	}
+	writeImage(newfname, smoothImage);
+}
+
+ImageType padding(char fname[], int size) {
+	// size is the mask size, not the number of pads you need
+	ImageType image(512, 512, 255);
+	readImage(fname, image);
+	ImageType newImage(512 + (size - 1), 512 + (size - 1), 255);
+	int temp;
+	for (int i = 0; i < 512; i++) {
+		for (int j = 0; j < 512; j++) {
+			image.getPixelVal(i, j, temp);
+			newImage.setPixelVal(i + (size / 2), j + (size / 2), temp);
+		}
+	}
+	return newImage;
 }

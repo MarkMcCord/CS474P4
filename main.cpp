@@ -40,6 +40,7 @@ void experiment4(char fname[], float gh, float gl);
 void visualizespectrum(double **real, double **image, int M, int N, const char name[]);
 
 float box_muller(float m, float s);
+double generateGaussianNoise(const double &variance);
 
 const float sobel_mask[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 
@@ -63,10 +64,11 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	experiment1(boy);
-	// experiment2(lenna);
+	// experiment1(boy);
+	experiment2(lenna);
 
-	inversefilter(lenna, 0, 1, 40);
+	// inversefilter(lenna, 0, 1, 40);
+	// wienerfilter(lenna, 0, 1, 0.0001);
 	// experiment4(girl, 1.5, 0.5);
 
 
@@ -394,86 +396,10 @@ void experiment2(char fname[])
 	fft2d(256, 256, real_fuv, image_fuv, -1);
 	fft2d(256, 256, real_fuv2, image_fuv2, -1);
 
-	double magnitude[256][256];
-	double magnitude2[256][256];
-	// Calculate magnitude
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			magnitude[i][j] = sqrt(real_fuv[i][j] * real_fuv[i][j] + image_fuv[i][j] + image_fuv[i][j]);
-			magnitude2[i][j] = sqrt(real_fuv2[i][j] * real_fuv2[i][j] + image_fuv2[i][j] + image_fuv2[i][j]);
-		}
-	}
+	visualizespectrum(real_fuv, image_fuv, 256, 256, "spatial_spectrum_before.pgm");
+	visualizespectrum(real_fuv2, image_fuv2, 256, 256, "spatial_spectrum_after.pgm");
 
-	// Apply Log for better visualization
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			magnitude[i][j] = log(1 + magnitude[i][j]);
-			magnitude2[i][j] = log(1 + magnitude2[i][j]);
-		}
-	}
-
-	float rmax = magnitude[0][0];
-	float rmin = magnitude[0][0];
-	float rmax2 = magnitude2[0][0];
-	float rmin2 = magnitude2[0][0];
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			if (magnitude[i][j] > rmax)
-			{
-				rmax = magnitude[i][j];
-			}
-			if (magnitude[i][j] < rmin)
-			{
-				rmin = magnitude[i][j];
-			}
-
-			if (magnitude2[i][j] > rmax2)
-			{
-				rmax2 = magnitude2[i][j];
-			}
-			if (magnitude2[i][j] < rmin2)
-			{
-				rmin2 = magnitude2[i][j];
-			}
-		}
-	}
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			magnitude[i][j] = 255 * (magnitude[i][j] - rmin) / (rmax - rmin);
-			magnitude2[i][j] = 255 * (magnitude2[i][j] - rmin2) / (rmax2 - rmin2);
-		}
-	}
-	// Write to image
-
-	ImageType spatial_spec_before(256, 256, 255);
-	ImageType spatial_spec_after(256, 256, 255);
 	char finImage_spatial[] = "part2_spatial.pgm";
-	char spatial_spectrum_before[] = "spatial_spectrum_before.pgm";
-	char spatial_spectrum_after[] = "spatial_spectrum_after.pgm";
-
-	int temp2;
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			temp2 = magnitude[i][j];
-			spatial_spec_before.setPixelVal(i, j, temp2);
-
-			temp2 = magnitude2[i][j];
-			spatial_spec_after.setPixelVal(i, j, temp2);
-		}
-	}
-
-	writeImage(spatial_spectrum_before, spatial_spec_before);
-	writeImage(spatial_spectrum_after, spatial_spec_after);
 	writeImage(finImage_spatial, finalImage_spatial);
 
 	for (int i = 0; i < 256; ++i)
@@ -505,104 +431,25 @@ void experiment2(char fname[])
 		image_fuv3[i] = new double[512];
 	}
 
-	// Frequency Filter, image magnitude/spectrum
-	// double **real_fuv4 = new double *[256];
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	real_fuv4[i] = new double[256];
-	// }
-	// double **image_fuv4 = new double *[256];
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	image_fuv4[i] = new double[256];
-	// }
-
 	for (int i = 0; i < 512; i++)
 	{
 		for (int j = 0; j < 512; j++)
 		{
 			if(i < 256 && j < 256){
 				baseImage.getPixelVal(i, j, temp);
-				real_fuv3[i][j] = temp;
+				real_fuv3[i][j] = temp * pow(-1, i + j);
 				image_fuv3[i][j] = 0;
 			}
 			else {
 				real_fuv3[i][j] = 0;
 				image_fuv3[i][j] = 0;
 			}
-			// real_fuv4[i][j] = temp;
-			// image_fuv4[i][j] = 0;
 		}
 	}
-
-	// Shift the spectrum
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		real_fuv4[i][j] = real_fuv4[i][j] * pow(-1, i + j);
-	// 		image_fuv4[i][j] = image_fuv4[i][j] * pow(-1, i + j);
-	// 	}
-	// }
 
 	fft2d(512, 512, real_fuv3, image_fuv3, -1);
-	// fft2d(256, 256, real_fuv4, image_fuv4, -1);
 
-	double magnitude3[512][512];
-	//Calculate magnitude
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude3[i][j] = sqrt(real_fuv3[i][j] * real_fuv3[i][j] + image_fuv3[i][j] + image_fuv3[i][j]);
-		}
-	}
-
-	//Apply Log for better visualization
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude3[i][j] = log(1 + magnitude3[i][j]);
-		}
-	}
-
-	//Normalize
-	float rmax3 = magnitude3[0][0];
-	float rmin3 = magnitude3[0][0];
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			if (magnitude3[i][j] > rmax3)
-			{
-				rmax3 = magnitude3[i][j];
-			}
-			if (magnitude3[i][j] < rmin3)
-			{
-				rmin3 = magnitude3[i][j];
-			}
-		}
-	}
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude3[i][j] = 255 * (magnitude3[i][j] - rmin3) / (rmax3 - rmin3);
-		}
-	}
-	// Write to image
-	ImageType frequency_spec_before(512, 512, 255);
-	char frequency_spectrum_before[] = "frequency_spectrum_before.pgm";
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			temp2 = magnitude3[i][j];
-			frequency_spec_before.setPixelVal(i, j, temp2);
-		}
-	}
-	writeImage(frequency_spectrum_before, frequency_spec_before);
+	visualizespectrum(real_fuv3, image_fuv3, 512, 512, "frequency_spectrum_before.pgm");
 
 	double **real_huv = new double *[512];
 	for (int i = 0; i < 512; i++)
@@ -635,65 +482,24 @@ void experiment2(char fname[])
 			image_huv[x][y] = 0;
 		}
 	}
+	for (int i = 0; i < 512; i++){
+		for (int j = 0; j < 512; j++){
+			real_huv[i][j] *= pow(-1, i + j);
+		}
+	}
 
 	ImageType finImage_frequency(256, 256, 255);
-	//ImageType frequency_spec(256, 256, 255);
 	char finImage_freq[] = "part2_frequency.pgm";
-	//char frequency_spectrum[] = "frequency_spec.pgm";
-
-	// double magnitude2[256][256];
-	// Calculate magnitude
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		magnitude2[i][j] = sqrt(real_fuv4[i][j] * real_fuv4[i][j] + image_fuv4[i][j] + image_fuv4[i][j]);
-	// 	}
-	// }
-
-	// Apply Log for better visualization
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		magnitude2[i][j] = log(1 + magnitude2[i][j]);
-	// 	}
-	// }
-
-	// rmax2 = magnitude2[0][0];
-	// rmin2 = magnitude2[0][0];
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		if (magnitude2[i][j] > rmax2)
-	// 		{
-	// 			rmax2 = magnitude2[i][j];
-	// 		}
-	// 		if (magnitude2[i][j] < rmin2)
-	// 		{
-	// 			rmin2 = magnitude2[i][j];
-	// 		}
-	// 	}
-	// }
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		magnitude2[i][j] = 255 * (magnitude2[i][j] - rmin2) / (rmax2 - rmin2);
-	// 	}
-	// }
-	// // Write to image
-	// for (int i = 0; i < 256; i++)
-	// {
-	// 	for (int j = 0; j < 256; j++)
-	// 	{
-	// 		temp2 = magnitude2[i][j];
-	// 		frequency_spec.setPixelVal(i, j, temp2);
-	// 	}
-	// }
 
 	fft2d(512, 512, real_huv, image_huv, -1);
+	for (int i = 0; i < 512; i++){
+		for (int j = 0; j < 512; j++){
+			real_huv[i][j] = 0;
+			image_huv[i][j] *= pow(-1, i + j);
+		}
+	}
+
+	visualizespectrum(real_huv, image_huv, 512, 512, "sobel_spectrum.pgm");
 
 	// Element-wise complex multiplication
 	for (int i = 0; i < 512; i++)
@@ -708,95 +514,18 @@ void experiment2(char fname[])
 			image_fuv3[i][j] = image_huv[i][j] * real_fuv3[i][j] + real_huv[i][j] * image_fuv3[i][j];
 		}
 	}
-
-	double magnitude4[512][512];
-	double magnitudeh[512][512];
-	//Calculate magnitude
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude4[i][j] = sqrt(real_fuv3[i][j] * real_fuv3[i][j] + image_fuv3[i][j] + image_fuv3[i][j]);
-			magnitudeh[i][j] = sqrt(real_huv[i][j] * real_huv[i][j] + image_huv[i][j] + image_huv[i][j]);
-		}
-	}
-
-	//Apply Log for better visualization
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude4[i][j] = log(1 + magnitude4[i][j]);
-			magnitudeh[i][j] = log(1 + magnitudeh[i][j]);
-		}
-	}
-
-	//Normalize
-	float rmax4 = magnitude4[0][0];
-	float rmin4 = magnitude4[0][0];
-	float rmaxh = magnitudeh[0][0];
-	float rminh = magnitudeh[0][0];
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			if (magnitude4[i][j] > rmax4)
-			{
-				rmax4 = magnitude4[i][j];
-			}
-			if (magnitude4[i][j] < rmin4)
-			{
-				rmin4 = magnitude4[i][j];
-			}
-
-			if (magnitudeh[i][j] > rmaxh)
-			{
-				rmaxh = magnitudeh[i][j];
-			}
-			if (magnitudeh[i][j] < rminh)
-			{
-				rminh = magnitudeh[i][j];
-			}
-		}
-	}
-	for (int i = 0; i < 512; i++)
-	{
-		for (int j = 0; j < 512; j++)
-		{
-			magnitude4[i][j] = 255 * (magnitude4[i][j] - rmin4) / (rmax4 - rmin4);
-			magnitudeh[i][j] = 255 * (magnitudeh[i][j] - rminh) / (rmaxh - rminh);
-		}
-	}
-	// Write to image
-	ImageType frequency_spec_after(512, 512, 255);
-	char frequency_spectrum_after[] = "frequency_spectrum_after.pgm";
-	ImageType sobel_spec(512, 512, 255);
-	char sobel_spectrum[] = "sobel_spectrum.pgm";
-	for (int i = 0; i < 256; i++)
-	{
-		for (int j = 0; j < 256; j++)
-		{
-			temp2 = magnitude4[i][j];
-			frequency_spec_after.setPixelVal(i, j, temp2);
-
-			temp2 = magnitudeh[i][j];
-			sobel_spec.setPixelVal(i, j, temp2);
-		}
-	}
-	writeImage(frequency_spectrum_after, frequency_spec_after);
-	writeImage(sobel_spectrum, sobel_spec);
+	visualizespectrum(real_fuv3, image_fuv3, 512, 512, "frequency_spectrum_after.pgm");
 
 	fft2d(512, 512, real_fuv3, image_fuv3, 1);
 
-	// for (int i = 0; i < 512; i++){
-	// 	for (int j = 0; j < 512; j++){
-	// 		real_fuv3[i][j] *= pow(-1, i + j);
-	// 	}
-	// }
-		
+	for (int i = 0; i < 512; i++){
+		for (int j = 0; j < 512; j++){
+			real_fuv3[i][j] *= pow(-1, i + j);
+		}
+	}
 
-	rmax2 = real_fuv3[0][0];
-	rmin2 = real_fuv3[0][0];
+	double rmax2 = real_fuv3[0][0];
+	double rmin2 = real_fuv3[0][0];
 	for (int i = 0; i < 256; i++)
 	{
 		for (int j = 0; j < 256; j++)
@@ -829,26 +558,21 @@ void experiment2(char fname[])
 	}
 
 	writeImage(finImage_freq, finImage_frequency);
-	//writeImage(frequency_spectrum, frequency_spec);
 
 	for (int i = 0; i < 512; ++i)
 	{
 		delete[] real_fuv3[i];
 		delete[] real_huv[i];
-		//delete[] real_fuv4[i];
 	}
 	delete[] real_fuv3;
 	delete[] real_huv;
-	//delete[] real_fuv4;
 	for (int i = 0; i < 512; ++i)
 	{
 		delete[] image_fuv3[i];
 		delete[] image_huv[i];
-		//delete[] image_fuv4[i];
 	}
 	delete[] image_fuv3;
 	delete[] image_huv;
-	//delete[] image_fuv4;
 }
 
 void degrade(char fname[], float mu, float sigma, double ** real_fuv, double ** image_fuv){
@@ -874,27 +598,19 @@ void degrade(char fname[], float mu, float sigma, double ** real_fuv, double ** 
 	{
 		noisei[i] = new double [512];
 	}
+
+	//noise
 	for (int i = 0; i < 512; i++)
 	{
 		for (int j = 0; j < 512; j++)
 		{
-			noiser[i][j] = 0;
-			noisei[i][j] = 0;
-		}
-	}
-
-	//noise
-	random_device rd{};
-	mt19937 gen{rd()};
-	normal_distribution<> d{mu, sigma};
-	for(int i = 0; i < 256; i++){
-		for(int j = 0; j < 256; j++){
-			noiser[i][j] = round(d(gen));
+			noiser[i][j] = generateGaussianNoise(sigma * sigma);
+			noisei[i][j] = generateGaussianNoise(sigma * sigma);
 		}
 	}
 
 	fft2d (512, 512, real_fuv, image_fuv, -1);
-	fft2d (512, 512, noiser, noisei, -1);
+	// fft2d (512, 512, noiser, noisei, -1);
 
 	visualizespectrum(real_fuv, image_fuv, 512, 512, "lenna_spec_before.pgm");
 
@@ -1165,6 +881,164 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 
 }
 void wienerfilter(char fname[], float mu, float sigma, float k){
+char degImage[] = "degraded.pgm";
+	ImageType degradedImage(256, 256, 255);
+	ImageType paddedImage(512, 512, 255);
+	readImage(fname, degradedImage);
+
+	// Padding base image
+	int temp;
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+
+			degradedImage.getPixelVal(i, j, temp);
+			paddedImage.setPixelVal(i, j, temp);
+		}
+	}
+	
+	// Step 1, FT
+	double **real_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_fuv[i] = new double [512];
+	}
+	double **image_fuv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_fuv[i] = new double [512];
+	}
+	double **real_huv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		real_huv[i] = new double [512];
+	}
+	double **image_huv = new double * [512];
+	for (int i = 0; i < 512; i++)
+	{
+		image_huv[i] = new double [512];
+	}
+
+	//center
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			paddedImage.getPixelVal(i, j, temp);
+			real_fuv[i][j] = temp * pow(-1, i + j);
+			image_fuv[i][j] = 0;
+		}
+	}
+	degrade(fname, mu, sigma, real_fuv, image_fuv);
+
+	// fft2d (512, 512, real_fuv, image_fuv, -1);
+
+	// complex division by H(u,v)
+	double a = .1, b = .1, T = 1;
+	for (int i = 0; i < 512; i++)
+	{
+		for (int j = 0; j < 512; j++)
+		{
+			int i_adj = i - 512 / 2, j_adj = j - 512 / 2;
+			double uavb = (a * i_adj + b * j_adj) * M_PI;
+			//H(u,v) = (T / uavb) * sin(uavb) * (cos(uavb) - jsin(uavb)), therefor:
+			real_huv[i][j] = (T / uavb) * sin(uavb) * cos(uavb);
+			image_huv[i][j] = (T / uavb) * sin(uavb) * -1 * sin(uavb);
+			//none of this works at (256, 256), use limit as uavb approaches 0
+			if (i_adj == -j_adj){
+				real_huv[i][j] = 1;
+				image_huv[i][j] = 0;
+			}
+			double hpower = (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
+			hpower = hpower / (hpower + k);
+			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
+			complex<double> h(real_huv[i][j], image_huv[i][j]);
+			complex<double> fh = f / h;
+				// real_fuv[i][j] = (real_fuv[i][j] * real_huv[i][j] + image_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
+				// image_fuv[i][j] = (image_fuv[i][j] * real_huv[i][j] - real_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
+			real_fuv[i][j] = fh.real();
+			image_fuv[i][j] = fh.imag();
+			real_fuv[i][j] *= hpower;
+			image_fuv[i][j] *= hpower;
+
+		}
+	}
+	visualizespectrum(real_huv, image_huv, 512, 512, "h_spectrum.pgm");
+	visualizespectrum(real_fuv, image_fuv, 512, 512, "lennainversespec.pgm");
+
+	// Step 4 Inverse FT
+	fft2d (512, 512, real_fuv, image_fuv, 1);
+
+	// Step 5 uncenter
+	ImageType finalImage(256, 256, 255);
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
+		}
+	}
+
+	// Normalization
+	float rmax = real_fuv[0][0];
+	float rmin = real_fuv[0][0];
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			if (real_fuv[i][j] > rmax)
+			{
+				rmax = real_fuv[i][j];
+			}
+			if (real_fuv[i][j] < rmin)
+			{
+				rmin = real_fuv[i][j];
+			}
+		}
+	}
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			real_fuv[i][j] = 255 * (real_fuv[i][j] - rmin) / (rmax - rmin);
+			finalImage.setPixelVal(i, j, real_fuv[i][j]);
+		}
+	}
+
+
+	// for (int i = 0; i < 512; i++)
+	// {
+	// 	for (int j = 0; j < 512; j++)
+	// 	{
+	// 		cout << real_fuv[i][j] << " " << image_fuv[i][j] << endl;
+	// 	}
+	// }
+
+	//print and clean up
+	char finImage[] = "wienerfiltered.pgm";
+	writeImage(finImage, finalImage);
+
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] real_fuv[i];
+	}
+	delete[] real_fuv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] image_fuv[i];
+	}
+	delete[] image_fuv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] real_huv[i];
+	}
+	delete[] real_huv;
+	for (int i = 0; i < 512; ++i)
+	{
+		delete[] image_huv[i];
+	}
+	delete[] image_huv;
 
 }
 
@@ -1589,4 +1463,25 @@ use_last = 1;
 }
 
 return( m + y1 * s );
+}
+
+double generateGaussianNoise(const double &variance)
+{
+    static bool haveSpare = false;
+    static double rand1, rand2;
+  
+    if(haveSpare)
+    {
+        haveSpare = false;
+        return sqrt(variance * rand1) * sin(rand2);
+    }
+  
+    haveSpare = true;
+  
+    rand1 = rand() / ((double) RAND_MAX);
+    if(rand1 < 1e-100) rand1 = 1e-100;
+    rand1 = -2 * log(rand1);
+    rand2 = (rand() / ((double) RAND_MAX)) * 2 * M_PI;
+  
+    return sqrt(variance * rand1) * cos(rand2);
 }

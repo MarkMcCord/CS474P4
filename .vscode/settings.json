@@ -6,6 +6,7 @@
         "complex": "cpp",
         "algorithm": "cpp",
         "iostream": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "cstdlib": "cpp"
     }
 }

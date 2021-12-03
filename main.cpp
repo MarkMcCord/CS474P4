@@ -76,14 +76,14 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	bandrejectfilter(boy);
-	notchfilter(boy, false);
-	notchfilter(boy, true);
+	// bandrejectfilter(boy);
+	// notchfilter(boy, false);
+	// notchfilter(boy, true);
 
 	// experiment2(lenna);
 
-	// inversefilter(lenna, 0, 1, 40);
-	// wienerfilter(lenna, 0, 1, 0.0001);
+	inversefilter(lenna, 0, 1, 40);
+	wienerfilter(lenna, 0, 1, 0.0001);
 
 	// experiment4(girl, 1.5, 0.5);
 
@@ -1073,8 +1073,6 @@ char degImage[] = "degraded.pgm";
 			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
 			complex<double> h(real_huv[i][j], image_huv[i][j]);
 			complex<double> fh = f / h;
-				// real_fuv[i][j] = (real_fuv[i][j] * real_huv[i][j] + image_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
-				// image_fuv[i][j] = (image_fuv[i][j] * real_huv[i][j] - real_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
 			real_fuv[i][j] = fh.real();
 			image_fuv[i][j] = fh.imag();
 			real_fuv[i][j] *= hpower;
@@ -1197,6 +1195,16 @@ void experiment4(char fname[], float gh, float gl)
 	{
 		image_fuv[i] = new double[1024];
 	}
+	double **real_huv = new double *[1024];
+	for (int i = 0; i < 1024; i++)
+	{
+		real_huv[i] = new double[1024];
+	}
+	double **image_huv = new double *[1024];
+	for (int i = 0; i < 1024; i++)
+	{
+		image_huv[i] = new double[1024];
+	}
 
 	for (int i = 0; i < 1024; i++)
 	{
@@ -1220,6 +1228,7 @@ void experiment4(char fname[], float gh, float gl)
 	}
 
 	fft2d(1024, 1024, real_fuv, image_fuv, -1);
+	visualizespectrum(real_fuv, image_fuv, 1024, 1024, "part4before.pgm");
 
 	// Step 3 Apply H(u,v)
 	float c = 1, D_0 = 1.8;
@@ -1230,10 +1239,14 @@ void experiment4(char fname[], float gh, float gl)
 		for (int j = 0; j < 1024; j++)
 		{
 			int i_adj = i - 1024 / 2, j_adj = j - 1024 / 2;
+			real_huv[i][j] = gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gl;
 			real_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gl;
 			image_fuv[i][j] *= gammaDiff * (1 - exp(coef * (i_adj * i_adj + j_adj * j_adj))) + gl;
 		}
 	}
+
+	visualizespectrum(real_huv, image_huv, 1024, 1024, "part4huv.pgm");
+	visualizespectrum(real_fuv, image_fuv, 1024, 1024, "part4after.pgm");
 
 	// Step 4 Inverse FT
 	fft2d(1024, 1024, real_fuv, image_fuv, 1);
@@ -1293,6 +1306,16 @@ void experiment4(char fname[], float gh, float gl)
 		delete[] image_fuv[i];
 	}
 	delete[] image_fuv;
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] real_huv[i];
+	}
+	delete[] real_huv;
+	for (int i = 0; i < 1024; ++i)
+	{
+		delete[] image_huv[i];
+	}
+	delete[] image_huv;
 }
 
 void test2dfft()

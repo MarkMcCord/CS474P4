@@ -82,8 +82,8 @@ int main(int argc, char *argv[])
 
 	// experiment2(lenna);
 
-	inversefilter(lenna, 0, 1, 40);
-	wienerfilter(lenna, 0, 1, 0.0001);
+	inversefilter(lenna, 0, 0.065, 40);
+	wienerfilter(lenna, 0, 0.065, 0.001);
 
 	// experiment4(girl, 1.5, 0.5);
 
@@ -721,14 +721,20 @@ void degrade(char fname[], float mu, float sigma, double ** real_fuv, double ** 
 	{
 		for (int j = 0; j < 512; j++)
 		{
-			noiser[i][j] = generateGaussianNoise(sigma * sigma);
-			noisei[i][j] = generateGaussianNoise(sigma * sigma);
-			// cout << noiser[i][j] << " " << noisei[i][j] << endl;
+			noiser[i][j] = 0;
+			noisei[i][j] = 0;
+		}
+	}
+	for (int i = 0; i < 256; i++)
+	{
+		for (int j = 0; j < 256; j++)
+		{
+			noiser[i][j] = generateGaussianNoise(sigma * sigma) * pow(-1, i + j);
 		}
 	}
 
 	fft2d (512, 512, real_fuv, image_fuv, -1);
-	// fft2d (512, 512, noiser, noisei, -1);
+	fft2d (512, 512, noiser, noisei, -1);
 
 	visualizespectrum(real_fuv, image_fuv, 512, 512, "lenna_spec_before.pgm");
 
@@ -910,18 +916,26 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 				real_huv[i][j] = 1;
 				image_huv[i][j] = 0;
 			}
+			// cout << real_huv[i][j] << " " << image_huv[i][j] << endl;
 			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
 			complex<double> h(real_huv[i][j], image_huv[i][j]);
 			complex<double> fh = f / h;
-			if(sqrt(i_adj * i_adj + j_adj * j_adj) <= radius){
+			if(abs(fh) > 1.1 * abs(complex<double> (real_fuv[256][256], image_fuv[256][256])))
+			{
+				fh.real(0);
+				fh.imag(0);
+			}
+			if(sqrt(i_adj * i_adj + j_adj * j_adj) <= radius)
+			{
 				// real_fuv[i][j] = (real_fuv[i][j] * real_huv[i][j] + image_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
 				// image_fuv[i][j] = (image_fuv[i][j] * real_huv[i][j] - real_fuv[i][j] * image_huv[i][j]) / (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
-			real_fuv[i][j] = fh.real();
-			image_fuv[i][j] = fh.imag();
+				real_fuv[i][j] = fh.real();
+				image_fuv[i][j] = fh.imag();
 			}
 		}
 	}
-	visualizespectrum(real_huv, image_huv, 512, 512, "h_spectrum.pgm");
+
+	visualizespectrum(real_huv, image_huv, 512, 512, "inverse_spectrum.pgm");
 	visualizespectrum(real_fuv, image_fuv, 512, 512, "lennainversespec.pgm");
 
 	// Step 4 Inverse FT
@@ -934,6 +948,7 @@ void inversefilter(char fname[], float mu, float sigma, float radius){
 		for (int j = 0; j < 256; j++)
 		{
 			real_fuv[i][j] = real_fuv[i][j] * pow(-1, i + j);
+			//cout << real_fuv[i][j] << endl;
 		}
 	}
 
@@ -1068,20 +1083,21 @@ char degImage[] = "degraded.pgm";
 				real_huv[i][j] = 1;
 				image_huv[i][j] = 0;
 			}
-			double hpower = (real_huv[i][j] * real_huv[i][j] + image_huv[i][j] * image_huv[i][j]);
-			hpower = hpower / (hpower + k);
 			complex<double> f(real_fuv[i][j], image_fuv[i][j]);
 			complex<double> h(real_huv[i][j], image_huv[i][j]);
 			complex<double> fh = f / h;
+			double hpower = norm(h);
+			hpower = hpower / (hpower + k);
+			fh *= hpower;
 			real_fuv[i][j] = fh.real();
 			image_fuv[i][j] = fh.imag();
-			real_fuv[i][j] *= hpower;
-			image_fuv[i][j] *= hpower;
+			// real_fuv[i][j] *= hpower;
+			// image_fuv[i][j] *= hpower;
 
 		}
 	}
-	visualizespectrum(real_huv, image_huv, 512, 512, "h_spectrum.pgm");
-	visualizespectrum(real_fuv, image_fuv, 512, 512, "lennainversespec.pgm");
+	visualizespectrum(real_huv, image_huv, 512, 512, "wiener_spectrum.pgm");
+	visualizespectrum(real_fuv, image_fuv, 512, 512, "lennawienerspec.pgm");
 
 	// Step 4 Inverse FT
 	fft2d (512, 512, real_fuv, image_fuv, 1);

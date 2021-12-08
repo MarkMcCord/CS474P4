@@ -76,16 +76,16 @@ int main(int argc, char *argv[])
 
 	//test2dfft();
 
-	// bandrejectfilter(boy);
-	// notchfilter(boy, false);
-	// notchfilter(boy, true);
+	bandrejectfilter(boy);
+	notchfilter(boy, false);
+	notchfilter(boy, true);
 
-	// experiment2(lenna);
+	experiment2(lenna);
 
-	inversefilter(lenna, 0, 0.065, 40);
-	wienerfilter(lenna, 0, 0.065, 0.001);
+	inversefilter(lenna, 0, 1, 40);
+	wienerfilter(lenna, 0, 1, 0.001);
 
-	// experiment4(girl, 1.5, 0.5);
+	experiment4(girl, 1.5, 0.5);
 
 
 	return 0;
@@ -332,8 +332,15 @@ void notchfilter(char fname[], bool noise)
 			}
 		}
 	}
+	if(noise)
+	{
+		visualizespectrum(real_fuv, image_fuv, 1024, 1024, "boyNoiseAfter.pgm");
+	}
+	else
+	{
+		visualizespectrum(real_fuv, image_fuv, 1024, 1024, "boyNotchAfter.pgm");
+	}
 
-	visualizespectrum(real_fuv, image_fuv, 1024, 1024, "boyNotchAfter.pgm");
 
 	// Step 4 Inverse FT
 	fft2d(1024, 1024, real_fuv, image_fuv, 1);
@@ -1309,7 +1316,7 @@ void experiment4(char fname[], float gh, float gl)
 	}
 
 	//print and clean up
-	char finImage[] = "part4_blurred.pgm";
+	char finImage[] = "part4result.pgm";
 	writeImage(finImage, finalImage);
 
 	for (int i = 0; i < 1024; ++i)
